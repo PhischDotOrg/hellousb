@@ -1,0 +1,2 @@
+SUBSYSTEM=="usb", ATTR{idVendor}=="dead", ATTR{idProduct}=="beef", MODE="0660", GROUP="sudo"
+
