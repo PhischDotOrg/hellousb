@@ -119,7 +119,7 @@ out:
         libusb_exit(ctx);
     }
 
-    return (0);
+    return (rc);
 }
 
 #if defined(__cplusplus)
