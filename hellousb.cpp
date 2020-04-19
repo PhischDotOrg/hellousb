@@ -2,6 +2,11 @@
 #include <cstring>
 #include <libusb-1.0/libusb.h>
 
+#include <unistd.h>
+
+#include <vector>
+#include <string>
+
 static void printdev(libusb_device *dev);
 
 #if defined(__cplusplus)
@@ -19,11 +24,11 @@ main(void) {
     libusb_device_handle *dev = NULL;
     libusb_context *ctx = NULL;
     int rc, cnt, cfgnum;
-    unsigned char txBuf[] = "Hallo, Welt!";
-    unsigned char rxBuf[sizeof(txBuf)];
-    int txLen = 0, rxLen = 0;
+    // unsigned char txBuf[32] = "Hallo, Welt!";
+    std::string even("abc"), odd("xyz");
+    std::vector<uint8_t> txBuf(4), rxBuf(4);
 
-    bzero(rxBuf, sizeof(rxBuf));
+    int txLen = 0, rxLen = 0;
 
     rc = libusb_init(&ctx);
     if (rc < 0) {
@@ -65,9 +70,6 @@ main(void) {
         printf("Failed to open USB device. rc=%i\n", rc);
     }
 
-    rc = libusb_detach_kernel_driver(dev, 0);
-    rc = libusb_detach_kernel_driver(dev, 1);
-
     rc = libusb_get_configuration(dev, &cfgnum);
     if (rc != 0) {
         printf("Failed to get configuration. rc=%i\n", rc);
@@ -89,21 +91,55 @@ main(void) {
         goto out;
     }
 
-    rc = libusb_bulk_transfer(dev, 1, txBuf, sizeof(txBuf), &txLen, 1000);
-    if (rc != 0) {
-        printf("Bulk Tx transfer failed. rc=%i\n", rc);
+    sleep(1);
+
+    for (unsigned i = 0; i < 10; i++) {
+        if ((i % 2) == 0) {
+            txBuf.assign(even.begin(), even.end());
+        } else {
+            txBuf.assign(odd.begin(), odd.end());
+        }
+
+        rxBuf.clear();
+    
+        rc = libusb_bulk_transfer(dev, 1, txBuf.data(), txBuf.size(), &txLen, 2500);
+        if (rc != 0) {
+            printf("[# %i] Bulk Tx transfer failed. rc=%i\n", i, rc);
+            goto out;
+        }
+
+        if (txLen != 0) {
+            printf("[# %i] Tx of %i bytes complete.\n", i, txLen);
+        }
+
+        rc = libusb_bulk_transfer(dev, 0x81, rxBuf.data(), txBuf.size(), &rxLen, 500);
+        if (rc != 0) {
+            printf("[# %i] Bulk Rx transfer failed. rc=%i\n", i, rc);
+            goto out;
+        }
+
+        if (txBuf == txBuf) {
+            printf("[# %i] Read %i bytes:\n%s\n", i, rxLen, rxBuf.data());
+        }
     }
 
-    printf("Transferred %i bytes\n", txLen);
-
-    rc = libusb_bulk_transfer(dev, 0x81, rxBuf, sizeof(rxBuf), &rxLen, 5000);
-    if (rc != 0) {
-        printf("Bulk Rx transfer failed. rc=%i\n", rc);
+#if 0
+    rc = libusb_control_transfer(dev,
+      (1 << 7) | (0 << 5) | (0 << 0), /* Direction: Device to Host, Type: Standard, Recipient: Device */
+      0x06, /* Get Descriptor */
+      0x0100, /* Device Descriptor */
+      0x0203,
+      rxBuf,
+      64,
+      2000
+      );
+    if (rc < 0) {
+        printf("Control transfer failed. rc=%i\n", rc);
+        goto out;
+    } else {
+        printf("Control transfer: Received %i Bytes.\n", rc);
     }
-
-    if (rxLen != 0) {
-        printf("Read %i bytes:\n%s\n", rxLen, rxBuf);
-    }
+#endif
 
 out:
     if (dev != NULL) {
@@ -118,6 +154,8 @@ out:
     if (ctx != NULL) {
         libusb_exit(ctx);
     }
+
+    txLen = rxLen = 0;
 
     return (rc);
 }
